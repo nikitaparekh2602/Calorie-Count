@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
+    <title>Calorie Counter</title>
+    <style>
+        body {
+            background-color: #f8f9fa; /* Light gray */
+            padding-top: 70px; /* Offset for fixed navbar */
+        }
+        .card {
+            border-radius: 10px;
+            background-color: #ffffff;
+        }
+        .btn-success {
+            background-color: #28a745;
+            border-color: #28a745;
+        }
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+        .table-striped tbody tr:nth-of-type(even) {
+            background-color: rgba(40, 167, 69, 0.05);
+        }
+        .table td, .table th {
+            vertical-align: middle;
+        }
+        .card-body {
+            padding: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar Section -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light fixed-top shadow-sm">
+        <div class="container">
+            <a class="navbar-brand" href="#">Calorie Counter</a>
+            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ml-auto">
+                    <li class="nav-item active">
+                        <a class="nav-link" href="#">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#calories">Calories</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#add-food">Add Food</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#chart">Nutritional Breakdown</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Section -->
+    <div class="container mt-5">
+        <h1 class="text-center mb-4" style="color: #17a2b8;">Calorie Counter</h1>
+
+        <!-- Form Section -->
+        <div class="card shadow mb-4" id="add-food">
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="food_consumed" class="font-weight-bold">Select Food:</label>
+                        <select name="food_consumed" id="food_consumed" class="form-control">
+                            <option value="">Choose...</option>
+                            {% for food in foods %}
+                                <option value="{{ food.id }}">{{ food.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-block">Add to List</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Consumed Food List -->
+        {% if consumed_food %}
+        <div class="card shadow mb-4" id="calories">
+            <div class="card-body">
+                <h4 class="text-center mb-3" style="color: #28a745;">Consumed Food</h4>
+                <table id="table" class="table table-striped">
+                    <thead>
+                        <tr class="bg-info text-white">
+                            <th>Food Name</th>
+                            <th>Calories</th>
+                            <th>Protein (g)</th>
+                            <th>Fats (g)</th>
+                            <th>Carbs (g)</th>
+                            <th>Remove Item</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in consumed_food %}
+                        <tr>
+                            <td>{{ c.food_consumed.name }}</td>
+                            <td>{{ c.food_consumed.calories }}</td>
+                            <td>{{ c.food_consumed.protein }}</td>
+                            <td>{{ c.food_consumed.fats }}</td>
+                            <td>{{ c.food_consumed.carbs }}</td>
+                            <td>
+                                <form method="post" action="{% url 'delete_food' c.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete this item?')">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        <tr>
+                            <td><b>Total</b></td>
+                            <td id="totalcalories"><b></b></td>
+                            <td id="totalprotein"><b></b></td>
+                            <td id="totalfats"><b></b></td>
+                            <td id="totalcarbs"><b></b></td>
+                            <td><b></b></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Nutritional Breakdown Pie Chart -->
+        <div class="card shadow mt-4">
+            <div class="card-body text-center">
+                <h4 class="text-center" style="color: #17a2b8;">Nutritional Breakdown</h4>
+                <div style="max-width: 400px; margin: 0 auto;"> <!-- Control container size -->
+                    <canvas id="nutritionalChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        {% else %}
+        <div class="alert alert-warning text-center mt-4">
+            No food consumed yet! Add some to the list.
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        var table = document.getElementById("table");
+        var calories = 0, protein = 0, fats = 0, carbs = 0;
+
+        // Calculate totals from table rows
+        for (var i = 1; i < table.rows.length - 1; i++) {
+            calories += parseInt(table.rows[i].cells[1].innerHTML);
+            protein += parseInt(table.rows[i].cells[2].innerHTML);
+            fats += parseInt(table.rows[i].cells[3].innerHTML);
+            carbs += parseInt(table.rows[i].cells[4].innerHTML);
+        }
+
+        // Update totals in the table
+        document.getElementById("totalcalories").innerHTML = '<b>' + calories + 'g</b>';
+        document.getElementById("totalprotein").innerHTML = '<b>' + protein + 'g</b>';
+        document.getElementById("totalfats").innerHTML = '<b>' + fats + 'g</b>';
+        document.getElementById("totalcarbs").innerHTML = '<b>' + carbs + 'g</b>';
+
+        // Nutritional breakdown chart using Chart.js
+        var total = calories + protein + fats + carbs; // Calculate total for percentage
+
+        var ctx = document.getElementById('nutritionalChart').getContext('2d');
+        var nutritionalChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: [
+                    `Calories (${((calories / total) * 100).toFixed(1)}%)`,
+                    `Protein (${((protein / total) * 100).toFixed(1)}%)`,
+                    `Fats (${((fats / total) * 100).toFixed(1)}%)`,
+                    `Carbs (${((carbs / total) * 100).toFixed(1)}%)`
+                ],
+                datasets: [{
+                    label: 'Nutritional Breakdown',
+                    data: [calories, protein, fats, carbs],
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0'],
+                    hoverBackgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(tooltipItem) {
+                                var value = tooltipItem.raw;
+                                var percentage = ((value / total) * 100).toFixed(1);
+                                return `${tooltipItem.label}: ${value}g (${percentage}%)`;
+                            }
+                        }
+                    }
+                },
+                title: {
+                    display: true,
+                    text: 'Nutritional Breakdown'
+                },
+                layout: {
+                    padding: {
+                        left: 10,
+                        right: 10,
+                        top: 10,
+                        bottom: 10
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
